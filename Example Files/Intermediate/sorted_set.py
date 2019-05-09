@@ -76,5 +76,15 @@ class SortedSet(Sequence, Set):
     def difference(self, iterable):
         return self - SortedSet(iterable)
 
+    # Definitions of add, discard, update & symmetric_difference_update.
+    def add(self, iterable):
+        return self + SortedSet(iterable)
 
+    def discard(self, iterable):
+        return self - SortedSet(iterable)
 
+    def update(self, iterable):
+        return self | SortedSet(iterable)
+
+    def symmetric_difference_update(self, iterable):
+        return self ^ SortedSet(iterable)

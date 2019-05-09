@@ -380,6 +380,27 @@ class TestSetOperationsMethods(unittest.TestCase):
         t = [3, 4, 5]
         self.assertFalse(s.isdisjoint(t))
 
+    # Tests for add, discard, update & symmetric_difference_update.
+    def test_add(self):
+        s = SortedSet({1, 2, 3})
+        t = [4, 5]
+        self.assertEqual(s.add(t), SortedSet({1, 2, 3, 4, 5}))
+
+    def test_discard(self):
+        s = SortedSet({1, 2, 3})
+        t = [2, 3]
+        self.assertEqual(s.discard(t), SortedSet({1}))
+
+    def test_update(self):
+        s = SortedSet({1, 2, 3})
+        t = [4, 5]
+        self.assertEqual(s.update(t), SortedSet({1, 2, 3, 4, 5}))
+
+    def test_symmetric_difference_update(self):
+        s = SortedSet({1, 2, 3})
+        t = [3, 4, 5]
+        self.assertEqual(s.symmetric_difference_update(t), SortedSet({1, 2, 4, 5}))
+
 
 class TestSetProtocol(unittest.TestCase):
 
