@@ -401,6 +401,10 @@ class TestSetOperationsMethods(unittest.TestCase):
         t = [3, 4, 5]
         self.assertEqual(s.symmetric_difference_update(t), SortedSet({1, 2, 4, 5}))
 
+    def test_copy(self):
+        s = SortedSet({1, 2, 3})
+        self.assertEqual(s.copy(), SortedSet({1, 2, 3}))
+
 
 class TestSetProtocol(unittest.TestCase):
 
