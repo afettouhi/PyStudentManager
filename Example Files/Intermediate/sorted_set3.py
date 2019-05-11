@@ -40,13 +40,18 @@ class SortedSet(Sequence, Set):
             return NotImplemented
         return self._items != rhs._items
 
+    def _is_unique_and_sorted(self):
+        return all(self[i] < self[i + 1] for i in range(len(self) - 1))
+
     def index(self, item):
+        assert self._is_unique_and_sorted()
         index = bisect_left(self._items, item)
         if (index != len(self._items)) and (self._items[index] == item):
             return index
         raise ValueError("{} not found".format(repr(item)))
 
     def count(self, item):
+        assert self._is_unique_and_sorted()
         return int(item in self)
 
     def __add__(self, rhs):
@@ -76,24 +81,4 @@ class SortedSet(Sequence, Set):
     def difference(self, iterable):
         return self - SortedSet(iterable)
 
-    # Definitions of add, discard, update & symmetric_difference_update.
-    def add(self, item):
-        if not self.__contains__(item):
-            self._items.discard(item)
 
-    def discard(self, item):
-        if not self.__contains__(item):
-            self._items.discard(item)
-
-    def update(self, item):
-        if not self.__contains__(item):
-            self._items.update(item)
-
-    def symmetric_difference_update(self, item):
-        if not self.__contains__(item):
-            self._items.symmetric_difference_update(item)
-
-    # Definitions of copy
-    def copy(self, item):
-        if not self.__contains__(item):
-            self._items.copy(item)
