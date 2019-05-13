@@ -44,7 +44,7 @@ except ImportError:
     # noinspection PyPep8Naming
     import configparser as ConfigParser
 
-__version__ = "16.4.3"
+__version__ = "16.5.0"
 virtualenv_version = __version__  # legacy
 DEBUG = os.environ.get("_VIRTUALENV_DEBUG", None) == "1"
 if sys.version_info < (2, 7):
@@ -100,12 +100,37 @@ else:
         import _winreg as winreg
 
     def get_installed_pythons():
+        final_exes = dict()
+
+        # Grab exes from 32-bit registry view
+        exes = _get_installed_pythons_for_view("-32", winreg.KEY_WOW64_32KEY)
+        # Grab exes from 64-bit registry view
+        exes_64 = _get_installed_pythons_for_view("-64", winreg.KEY_WOW64_64KEY)
+        # Check if exes are unique
+        if set(exes.values()) != set(exes_64.values()):
+            exes.update(exes_64)
+
+        # Create dict with all versions found
+        for version, bitness in sorted(exes):
+            exe = exes[(version, bitness)]
+            # Add minor version (X.Y-32 or X.Y-64)
+            final_exes[version + bitness] = exe
+            # Add minor extensionless version (X.Y); 3.2-64 wins over 3.2-32
+            final_exes[version] = exe
+            # Add major version (X-32 or X-64)
+            final_exes[version[0] + bitness] = exe
+            # Add major extensionless version (X); 3.3-32 wins over 3.2-64
+            final_exes[version[0]] = exe
+
+        return final_exes
+
+    def _get_installed_pythons_for_view(bitness, view):
         exes = dict()
         # If both system and current user installations are found for a
         # particular Python version, the current user one is used
         for key in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
             try:
-                python_core = winreg.CreateKey(key, "Software\\Python\\PythonCore")
+                python_core = winreg.OpenKey(key, "Software\\Python\\PythonCore", 0, view | winreg.KEY_READ)
             except WindowsError:
                 # No registered Python installations
                 continue
@@ -118,33 +143,13 @@ else:
                         at_path = winreg.QueryValue(python_core, "{}\\InstallPath".format(version))
                     except WindowsError:
                         continue
-                    exes[version] = join(at_path, "python.exe")
+                    # Remove bitness from version
+                    if version.endswith(bitness):
+                        version = version[: -len(bitness)]
+                    exes[(version, bitness)] = join(at_path, "python.exe")
                 except WindowsError:
                     break
             winreg.CloseKey(python_core)
-
-        # For versions that track separate 32-bit (`X.Y-32`) & 64-bit (`X-Y`)
-        # installation registrations, add a `X.Y-64` version tag and make the
-        # extensionless `X.Y` version tag represent the 64-bit installation if
-        # available or 32-bit if it is not
-        updated = {}
-        for ver in exes:
-            if ver < "3.5":
-                continue
-            if ver.endswith("-32"):
-                base_ver = ver[:-3]
-                if base_ver not in exes:
-                    updated[base_ver] = exes[ver]
-            else:
-                updated[ver + "-64"] = exes[ver]
-        exes.update(updated)
-
-        # Add the major versions
-        # Sort the keys, then repeatedly update the major version entry
-        # Last executable (i.e., highest version) wins with this approach,
-        # 64-bit over 32-bit if both are found
-        for ver in sorted(exes):
-            exes[ver[0]] = exes[ver]
 
         return exes
 
@@ -734,14 +739,50 @@ def main():
     verbosity = options.verbose - options.quiet
     logger = Logger([(Logger.level_for_integer(2 - verbosity), sys.stdout)])
 
-    if options.python and not os.environ.get("VIRTUALENV_INTERPRETER_RUNNING"):
+    def should_reinvoke(options):
+        """Do we need to reinvoke ourself?"""
+        # 1. Did the user specify the --python option?
+        if options.python and not os.environ.get("VIRTUALENV_INTERPRETER_RUNNING"):
+            return options.python
+        # All of the remaining cases are only for Windows
+        if sys.platform == "win32":
+            # 2. Are we running from a venv-style virtual environment with a redirector?
+            if hasattr(sys, "_base_executable"):
+                return sys._base_executable
+            # 3. Special case for Python 3.7.2, where we have a redirector,
+            #    but sys._base_executable does not exist.
+            if sys.version_info[:3] == (3, 7, 2):
+                # We are in a venv if the environment variable __PYVENV_LAUNCHER__ is set.
+                if "__PYVENV_LAUNCHER__" in os.environ:
+                    # The base environment is either sys.real_prefix (if
+                    # we were invoked from a venv built from a virtualenv) or
+                    # sys.base_prefix if real_prefix doesn't exist (a simple venv).
+                    base_prefix = getattr(sys, "real_prefix", sys.base_prefix)
+                    # We assume the Python executable is directly under the prefix
+                    # directory. The only known case where that won't be the case is
+                    # an in-place source build, which we don't support. We don't need
+                    # to consider virtuale environments (where python.exe is in "Scripts"
+                    # because we've just followed the links back to a non-virtual
+                    # environment - we hope!)
+                    base_exe = os.path.join(base_prefix, "python.exe")
+                    if os.path.exists(base_exe):
+                        return base_exe
+        # We don't need to reinvoke
+        return None
+
+    interpreter = should_reinvoke(options)
+    if interpreter:
         env = os.environ.copy()
-        interpreter = resolve_interpreter(options.python)
+        interpreter = resolve_interpreter(interpreter)
         if interpreter == sys.executable:
             logger.warn("Already using interpreter {}".format(interpreter))
         else:
             logger.notify("Running virtualenv with interpreter {}".format(interpreter))
             env["VIRTUALENV_INTERPRETER_RUNNING"] = "true"
+            # Remove the variable __PYVENV_LAUNCHER__ if it's present, as it causes the
+            # interpreter to redirect back to the virtual environment.
+            if "__PYVENV_LAUNCHER__" in env:
+                del env["__PYVENV_LAUNCHER__"]
             file = __file__
             if file.endswith(".pyc"):
                 file = file[:-1]
@@ -1693,7 +1734,7 @@ def install_files(home_dir, bin_dir, prompt, files):
     virtualenv_name = os.path.basename(home_dir)
     for name, content in files.items():
         content = content.replace("__VIRTUAL_PROMPT__", prompt or "")
-        content = content.replace("__VIRTUAL_WINPROMPT__", prompt or "({})".format(virtualenv_name))
+        content = content.replace("__VIRTUAL_WINPROMPT__", prompt or "({}) ".format(virtualenv_name))
         content = content.replace("__VIRTUAL_ENV__", home_dir)
         content = content.replace("__VIRTUAL_NAME__", virtualenv_name)
         content = content.replace("__BIN_NAME__", os.path.basename(bin_dir))
@@ -2277,42 +2318,43 @@ a6FOZy1jZzukdvvqN1kPccDLjbwGdtJ8m72rgeki+xOnXcf/CzFcuJM=
 # file activate.csh
 ACTIVATE_CSH = convert(
     """
-eJx9k9tq20AQhu/3Kf7IJm5N4vRarts6caCBxAnBCZSmLCtpXC1IK2e1svFNn72zklzkA9WFkOb0
-z34708Mi1SWWOiPkVekQEaqSEmy0SxGURWVjQqTNlYqdXitHo7hMAwyXtsjBn8OR6OFHUSFWxhQO
-tjLQDom2FLts6703ljgvQbTFTK11QphpXGeq1Pic1IYk+vY7VzobxUX+ZSRESQ6GNpk2NBm8iYEQ
-KtOqREK7LjBwxN32v8rH+5l8vXtevEzv5dN08R1nE3zC+Tm4CJk1alvQP4oL3wMfVRkvduQdw1Kq
-ynSMkzrPjw9Pi64SVsxj5SaHQnXgf6Rq/7hx+W53jtv5aysdvJ2Fw8BrBaYwCZts5SFQW/OITMe6
-2iZFzPR6eKm1tbWU0VoZh7WyWkUZlSPRyd1XqC/ioCsEUnZ+pQya6zoiyChazGL/JjrZ4fuVlNd3
-czmfPtxKGf7L4Ecv8aGj1ZBiuZpE8BEuJSPAj1fn8tKonDDBqRxBWUkng/e6cV6aTKKXHtlNUWWJ
-3wdtoDyZS20c2ZoV+SLaFiYn4y44mGM2qY5TXoOSLtBvxgG8WhUTXfIgJ1CG14qw8XXNwHFWrCxB
-RUXl/HHaGeK47Ubx5ngCPHmt9eDEJ8aIiTex/hh1cseAyR8Mg367VWwYdiuG+4RaSebzs7+jFb7/
-Qqd+g6mF1Uz2LnK3rfX08dulhcFl3vwL0SyW+At+C2qe
+eJx9VNtO4zAQffdXDKEiUEFhX8t22bJFWqRyEVuQVkKy3Hi6sZQ44Dit+sK379hJittG5KGqPZdz
+fOZyCLNUlbBQGUJelRbmCFWJElbKphCVRWUShLnS5yKxaiksDpIyjaC/MEUO9Lc/YIfwt6ggEVoX
+FkylQVmQymBis7Wz/jJIcRLma5iIpZIIEwXXmSgVfJf+Qs5//suFygZJkf8YMFaiBY2rTGkcxa8s
+ZkxkSpQgsWUBsUVi27viD9MJf7l9mj2Pp/xxPPsNByO4gKMjoCSol+Dvot6e3/A9cl6VdmB71ksw
+mIoyvYROnKeHu8dZiARvpMebHe0CeccvoLz9sjY5tq3h5v6lgY5eD4b9yGFFutCSrkzlRMAm554y
+we3bWhYJqXcIzx5bGYMZLoW2sBRGiXmG5YAFsdsIvhA7rCDiPDhyHtXl2lOQpGhkZtuVCKKH7+ec
+X9/e8/vx3Q3nw00EfWoBxwFWrRTBeSWiE7Apagb0OXRKz7XIEUbQFcMwK7HLOT6OtwlZQo9PIGao
+pVrULKj64Ysnt3/G19ObtgkCJrXzF74jRz2MaCnJgtcN5B7wLfK2DedOp4vGydPcet5urq2XBEZv
+DcnQpBZVJt0KUBqEa4YzpS0a3x7odFOm0Dlqe9oEkN8qVUlK01/iKfSa3LRRKmqkBc2vBKFpmyCs
+XG4d2yYyEQZBzIvKOgLN+JDveiVoaXyqedVYOkTrmCRqutrfNVHr6xMFBhh9QD/qNQuGLvq72d03
+3Jy2CtGCf0rca/tp+N4BXqsflKquRr0L2sjmuClOu+/8/NKvTQsNZ3l9ZqxeTew//1a6EA==
 """
 )
 
 # file activate.xsh
 ACTIVATE_XSH = convert(
     """
-eJyFU11rwjAUfc+vuIt9sMz1Bwg+OCYoaB2bkw2RkNlbLdSkJLFsjP33JdV+aN2Wh5L7eW7PuaGU
-vkqhd8A3Jsm5QdAblWQGYqkgT5Q58BRFTiklsZJ7+HDJgZEy1ZDsM6kMbNEwjRlwDex0JyTCGFiE
-ZdcuV1vt9wnYk8RAs89IbigkAniacI36GHInwrR0rk55a1IWel9BEHwHFqZL2Xz6wJaTp8XLcMoe
-h4sx7QGlft3Jc04YgNfKPAO7Ev4f7m0xnofj+WzUBq1Cbegq9NcAdVJFVxkbhcuCtONc55x5jaS6
-UkgRoTbq4IRACkKagnUrR13egWdMYygTb65rUavpBCEdOAiNtptSmGLOhYGcq4S/p6hJU/rV5RBr
-n1xtavlq1BHS/CMbU5SxhocxalNa2jnSCw29prXqr4+OgEdR96zxbbW1Xd8aFuR+ErJwOBtZhB7Y
-rRdmsFAH7IHCLOUbLCyfkIsFub4TJU2NtbB11lNEf5O+mPt8WwqNm8tx+UhsjbubnRRugLu9+5YP
-6AcvDiI9
+eJyNU11PwjAUfe+vuNY9sIj7ASQ+YCSBRD6i02gIaSq7gyWjXdqyaIz/3XYwVmB+9GFZ78c57T2n
+lNIXKfQa+NJkJTcIeqmywkAqFZSZMlueoygppSRVcgPvrjgyUuYask0hlYEVGqaxAK6B7f8JSTAF
+lmCN2uFqpcMeAbuyFGjxkcglhUwAzzOuUe9SbiWY18H5vm5B6sbgM4qir8jSdCib3t+x59FD/NS/
+Z7N+PKRdoDRskAIXhBsIziqPyFrSf9O9xsPpZDgdD85JD6lz6kPqtwM0RYdx1bnB5Lka2u5cxzML
+vKLWTjZ7mI5n8b8A9rUNjpAiQW3U1gmKFIQ0lXpW1gblEh4xT6EuvGjXtHGFE5ZcwlZotGhKYY4l
+FwZKrjL+lqMmvoXmp4dYhKQV1M7d6yPEv5jNKcqYf1VGbcmZB5x4lRcCfzfvLXaBiCdJ5wj46uD+
+Tmg3luR2NGGT/nhgGbpgX48wN7HaYhcUFjlfYrULCTkxWru36jF59rJ9NlJlf7JQde5j11VS+yZr
+0d22eUPaxdycLKMTvqWjR3610emDtgTu36ylcJe83rhv/di/AYN1UZY=
 """
 )
 
 # file activate.bat
 ACTIVATE_BAT = convert(
     """
-eJx9Ul9LhEAQfxf8DoOclI/dYyFkaCmcq4gZQTBUrincuZFbff12T133TM+nnd35/Zvxlr7XDFhV
-mUZHOVhFlOWP3g4DUriIWoVomYZpNBWUtGpaWgImO191pFkSpzlcmgaI70jVX7n2Qp8tuByg+46O
-CMHbMq64T+nmlJt082D1T44muCDk2prgEHF4mdI9RaS/QwSt3zSyIAaftRccvqVTBziD1x/WlPD5
-xd729NDBb8Nr4DU9QNMKsJeH9pkhPedhQsIkDuCDCa6A+NF9IevVFAohkqizdHetg/tkWvPoftWJ
-MCqnOxv7/x7Np6yv9P2Ker5dmX8yNyCkkWnbZy3N5LarczlqL8htx2EM9rQ/2H5BvIsIEi8OEG8U
-+g8CsNTr
+eJyVk1FLhEAUhd8X/A8XWSkf28dCyMUpBR3FzAiCS+WYwq4TOdXfb0Z3dTJdyCfveO85n8frNXut
+OPCyNFbGqmUCzDxIs3s3REJzB1GrEE3VVJdQsLJuWAEYh97QkaRxlGRwbqxAXp1Uf+RYM32W1LKB
+7Vp2nJC6DReD9m+5qeQ6Wd+a/SN7dlzn9oI7dxsSXJCcoXOskfLgYXdv/j8LnXiM8iGg/RmiZmOr
+bFMSgcebMwGfKhgbBIfnL14X8P7BX3Zs38J3LSoQFdtD3YCVuJlvnfgmj5kfUz+OCLxxqUWoF9zk
+qtYAFyZkBsO9ArzUh/td0ZqP9IskElTFMsnwb4/GqeoLPUlZT5dJvf8Id5hQIONynUSa2G0Wc+m8
+Z+w2w4/Tt2hbYT0hbgOK1I0I4tUw/QOTZfLE
 """
 )
 
@@ -2329,17 +2371,18 @@ pk+k4fAba/wd0Pr4P2CqyLeOlJ4iKfkJo6v/iaH9YzfPMEoeMG2RUA==
 # file activate.ps1
 ACTIVATE_PS = convert(
     """
-eJyNVMtu2zAQvOsrNrLQ2miloFcXPdiwgRhwHCN2c2kLgqZWMQGKFEhKqVHky3LoJ/UXSlqWX3LS
-8ibtzHJ2d5Z/Xn53YLnmBjIuEPLSWFghpMqCUaVmmEKmVQ5ztVh/ho0qgVEpXVSXEriFlGtkVmwS
-GCmwLk8fEkiuKbO8ohaTwnwKgsgwzQvbX95MFmQ+WN7AF4jyDZeVYtRyJZN8w1SeU5kmBbXrPWE4
-WIzJaHLv8KYQ3MY+Cl2NRokK668w2qe9TpKwB/GcapQ2CLJSMp8dHoVaUdFPsZHV/WaeuGXrHxDN
-lByhsbr0IewFvwJwh2fQte53fUVFNacrgX1yNx2Rh8n98utgur2xt0XXHH8ilFW/qfB12h6vMVeu
-kAYJYQsaQmyYKnBXxJb5HFwQ2VTbJ0qkpOLallSQwg2vsC2Ze3Ad92rf4p/r5Rbzw4XfX2Mc6dw2
-pqlrPHtoKfIpHOZ00ucsiAXS7KKaFhK1VprWBjDO29K5lClpuSzxXN1Vywan6jqwQJFBukNcvd2P
-g8/exhWbVLGdlOe2XetwLaLY2LWLxDls/0JE9aPxpA6U0qAFrjUKrKi0e7ea4CAEYqlkeijQ7eRx
-s9z4m1ULWj13waNPx9zpa1nVIxv/B8ebEJ7nvCZkOJmR2eB2TNzxMLIYzwkJ4cNRjno0Z1wncjEY
-Tsdkfn93O182G3vevdc8eRhqGO56f7oRF4gn63GUqzWxS9d0YJCmQKHQmPGfYP0zicBK7R8pqCkf
-YVW6t1TJ9/5FNYzq1D2uyT7Hk3bOidfKPc5hN+r+e0Wg14NwO3R8ElwejPjuPxbdu/EvkRDrCw==
+eJytVcFu2zAMvfsrWNfYEmx2sWuGHVIkQAO0adBkvWyDoMh0I0CWDElOGwz598p2HDt20w3YdLP5
+SD2Sj9QlrDbcQMIFQpobC2uEWFkwKtcMY0i0SmGhlpuvsFM5MCqls+pcArcQc43Mil0EEwXWxRlB
+BNEVZZZvqcUoM188LzBM88yOVjezJVmMVzfwDYJ0x+VWMWq5klG6YypNqYyjjNrN0eF6vJySyezB
+4U0muA0LKww0GiW2WH35wTHsVRT5QwgXVKO0npfkkhXR4UmoNRWjGGtagx/mmVu2+QXBXMkJGqvz
+woRD77cH7vAEBtb9rq7YUs3pWuCI3N9OyOPsYfV9fFveOCzRlU9xApTbUZ3hebcjXmOqXCI1Evwe
+1IfQMJXhIYnSc++9QbLOdkSUiMmWa5tTQTLXvMz2aB7Blb1g+55/ly+3mDYX/jzn0eJZFqbOazp/
+7DEqQjjMaae7XhAKpMmbbHpI1FppWgnAOG1Lp1KmpOUyxy67i54MTtldwhJFAvEBcfF+PRqdvY/L
+drFiByr7vlwrc0Ui29mNs4QplH8hoPrJFE6XkEuDFrjWKHBLpT2q1XgNEQilknGToJvJdrFc++tR
+83o1d8bWp/M88OtJtUDW+vfak+B3Y14Rcj2bk/n4bkrcKWBkOV0Q4sOnVoyqNR1fR3I5vr6dksXD
+/d1iVU9st3rnNNk01fcPtT+diDccT8ajFavg55OmBiWhIolQulH2uyrqNfh0thpgJblxHLuNisDc
+TnYbONOY8BewqvyJL9w4KT9BJ0hxnrXTWbhRbpWfYackPgsu8cTtw1/ugH2rbCgM/nuWtJMcy3Wx
+wQ+5fYZ17h4aJT8Wz41hVMfu5YnOpjwIBn/eITAcwn+rxN57BRHvOEk=
 """
 )
 

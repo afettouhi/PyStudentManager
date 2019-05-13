@@ -79,7 +79,7 @@ class SortedSet(Sequence, Set):
     # Definitions of add, discard, update & symmetric_difference_update.
     def add(self, item):
         if not self.__contains__(item):
-            self._items.discard(item)
+            self._items.add(item)
 
     def discard(self, item):
         if not self.__contains__(item):
