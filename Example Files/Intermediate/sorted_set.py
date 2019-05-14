@@ -77,23 +77,29 @@ class SortedSet(Sequence, Set):
         return self - SortedSet(iterable)
 
     # Definitions of add, discard, update & symmetric_difference_update.
-    def add(self, item):
-        if not self.__contains__(item):
-            self._items.add(item)
+    def add(self, iterable):
+        self = self + SortedSet(iterable)
+        return self
 
-    def discard(self, item):
-        if not self.__contains__(item):
-            self._items.discard(item)
+    def discard(self, iterable):
+        _list = []
+        for i in range(len(self)):
+            for j in range(len(iterable)):
+                if self[i] != iterable[j]:
+                    _list += self
+        return SortedSet(_list)
 
-    def update(self, item):
-        if not self.__contains__(item):
-            self._items.update(item)
+    def update(self, iterable):
+        _list = []
+        for i in range(len(self)):
+            for j in range(len(iterable)):
+                _list += self
+        return SortedSet(_list)
 
-    def symmetric_difference_update(self, item):
-        if not self.__contains__(item):
-            self._items.symmetric_difference_update(item)
+    def symmetric_difference_update(self, iterable):
+        return self ^ SortedSet(iterable)
 
     # Definitions of copy
-    def copy(self, item):
-        if not self.__contains__(item):
-            self._items.copy(item)
+    def copy(self):
+        iterable = self
+        return iterable

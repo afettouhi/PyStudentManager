@@ -1,3 +1,4 @@
+
 class Phonebook:
 
     def __init__(self):
@@ -8,12 +9,12 @@ class Phonebook:
     
     def lookup(self, name):
         return self.entries[name]
-        
+
     def is_consistent(self):
-        return True
+        return self.entries
 
     def get_names(self):
-        return True
+        return self.entries.keys()
 
     def get_numbers(self):
-        return True
+        return self.entries.values()

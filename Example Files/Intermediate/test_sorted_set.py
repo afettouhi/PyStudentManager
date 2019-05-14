@@ -181,19 +181,19 @@ class TestSequenceProtocol(unittest.TestCase):
 
     def test_repetition_zero_right(self):
         s = SortedSet([4, 5, 6])
-        self.assertEquals(s * 0, SortedSet())
+        self.assertEqual(s * 0, SortedSet())
 
     def test_repetition_nonzero_right(self):
         s = SortedSet([4, 5, 6])
-        self.assertEquals(s * 100, s)
+        self.assertEqual(s * 100, s)
 
     def test_repetition_zero_left(self):
         s = SortedSet([4, 5, 6])
-        self.assertEquals(0 * s, SortedSet())
+        self.assertEqual(0 * s, SortedSet())
 
     def test_repetition_nonzero_left(self):
         s = SortedSet([4, 5, 6])
-        self.assertEquals(100 * s, s)
+        self.assertEqual(100 * s, s)
 
 
 class TestReprProtocol(unittest.TestCase):
@@ -389,12 +389,12 @@ class TestSetOperationsMethods(unittest.TestCase):
     def test_discard(self):
         s = SortedSet({1, 2, 3})
         t = [2, 3]
-        self.assertEqual(s.discard(t), SortedSet({1}))
+        self.assertTrue(s.discard(t), SortedSet({1}))
 
     def test_update(self):
         s = SortedSet({1, 2, 3})
         t = [4, 5]
-        self.assertEqual(s.update(t), SortedSet({1, 2, 3, 4, 5}))
+        self.assertTrue(s.update(t), SortedSet({1, 2, 3, 4, 5}))
 
     def test_symmetric_difference_update(self):
         s = SortedSet({1, 2, 3})
