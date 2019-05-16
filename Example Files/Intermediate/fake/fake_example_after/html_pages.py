@@ -37,9 +37,13 @@ class HtmlPagesConverter:
             while f.tell() != page_end:
                 line = f.readline()
                 line = line.rstrip()
-                if "PAGE_BREAK" in line:
-                    continue
-                html += html_converter.escape(line, quote=True)
-                html += "<br />"
+                html = line
         return html
 
+    def convert_html_page(self, page):
+        """Convert html page with the given number (zero indexed)"""
+        html = ""
+        for line in self.get_html_page(page):
+            html += html_converter.escape(line, quote=True)
+            html += "<br />"
+        return html
