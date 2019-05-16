@@ -16,5 +16,5 @@ def tennis_score(player1_points, player2_points):
         return "Advantage Player 2"
     elif player1_points - player2_points == 2 or player1_points - player2_points == 4:
         return "Win for Player 1"
-    elif player2_points - player1_points == 2:
+    elif player2_points - player1_points == 2 and player2_points >= 4:
         return "Win for Player 2"
