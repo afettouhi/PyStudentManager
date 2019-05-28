@@ -57,6 +57,7 @@ def lava_pit(position, alive):
     print("You fall into a lava pit.")
     return position, False
 
+
 def play():
 
     position = (0, 0)
@@ -103,6 +104,7 @@ def play():
         print("You have chosen to leave the game.")
 
     print("Game over")
+
 
 if __name__ == '__main__':
     play()
