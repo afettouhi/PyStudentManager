@@ -7,6 +7,7 @@ def ensure_has_divisible(items, divisor):
     items.append(divisor)
     return divisor
 
+
 items = [2, 25, 9, 37, 24, 28, 14]
 divisor = 12
 

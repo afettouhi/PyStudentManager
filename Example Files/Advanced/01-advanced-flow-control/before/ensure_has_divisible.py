@@ -1,6 +1,4 @@
 
-
-
 items = [2, 25, 9, 37, 24, 28, 14]
 divisor = 12
 
@@ -13,6 +11,3 @@ else:  # nobreak
     found = divisor
 
 print("{items} contains {found} which is a multiple of {divisor}".format(**locals()))
-
-
-
