@@ -2,11 +2,11 @@
 from functools import singledispatch
 
 
-
 class Shape:
 
     def __init__(self, solid):
         self.solid = solid
+
 
 class Parallelogram(Shape):
 
@@ -79,11 +79,14 @@ def _(shape):
     # Draw a triangle
     print("\u25B2" if shape.solid else "\u25B3")
 
+
 def circle_intersects_circle(circle, shape):
     pass
 
+
 def circle_intersects_parallelogram(circle, shape):
     pass
+
 
 def circle_intersects_triangle(circle, shape):
     pass
