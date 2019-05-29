@@ -2,6 +2,7 @@ import struct
 from pprint import pprint as pp
 from binascii import hexlify
 
+
 class Vector:
 
     def __init__(self, x, y, z):
@@ -58,6 +59,7 @@ def main():
         vertices.append(vertex)
 
     pp(vertices)
+
 
 if __name__ == '__main__':
     main()
