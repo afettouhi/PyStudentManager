@@ -16,6 +16,10 @@ class Parallelogram(Shape):
         self.pb = pb
         self.pc = pc
 
+    def intersects(self, shape):
+        # Delegate to the generic function, swapping arguments
+        return intersects_with_parallelogram(shape, self)
+
 
 class Triangle(Shape):
 
@@ -24,6 +28,10 @@ class Triangle(Shape):
         self.pa = pa
         self.pb = pb
         self.pc = pc
+
+    def intersects(self, shape):
+        # Delegate to the generic function, swapping arguments
+        return intersects_with_triangle(shape, self)
 
 
 class Circle(Shape):
@@ -36,6 +44,51 @@ class Circle(Shape):
     def intersects(self, shape):
         # Delegate to the generic function, swapping arguments
         return intersects_with_circle(shape, self)
+
+
+# Added solution to double dispatch exercise e.g. triangle and parallelogram!
+
+
+@singledispatch
+def intersects_with_parallelogram(shape, parallelogram):
+    raise TypeError("Don't know how to compute intersection of {!r} with {!r} and {!r}"
+                    .format(parallelogram, shape))
+
+
+@intersects_with_parallelogram.register(Circle)
+def _(shape, parallelogram):
+    return parallelogram_intersects_circle(parallelogram, shape)
+
+
+@intersects_with_parallelogram.register(Parallelogram)
+def _(shape, parallelogram):
+    return parallelogram_intersects_parallelogram(parallelogram, shape)
+
+
+@intersects_with_parallelogram.register(Triangle)
+def _(shape, parallelogram):
+    return parallelogram_intersects_triangle(parallelogram, shape)
+
+
+@singledispatch
+def intersects_with_triangle(shape, triangle):
+    raise TypeError("Don't know how to compute intersection of {!r} with {!r} and {!r}"
+                    .format(triangle, shape))
+
+
+@intersects_with_triangle.register(Circle)
+def _(shape, triangle):
+    return triangle_intersects_circle(triangle, shape)
+
+
+@intersects_with_triangle.register(Parallelogram)
+def _(shape, triangle):
+    return triangle_intersects_parallelogram(triangle, shape)
+
+
+@intersects_with_triangle.register(Triangle)
+def _(shape, triangle):
+    return triangle_intersects_triangle(triangle, shape)
 
 
 @singledispatch
@@ -78,6 +131,30 @@ def _(shape):
 def _(shape):
     # Draw a triangle
     print("\u25B2" if shape.solid else "\u25B3")
+
+
+def parallelogram_intersects_circle(parallelogram, shape):
+    pass
+
+
+def parallelogram_intersects_parallelogram(parallelogram, shape):
+    pass
+
+
+def parallelogram_intersects_triangle(parallelogram, shape):
+    pass
+
+
+def triangle_intersects_circle(triangle, shape):
+    pass
+
+
+def triangle_intersects_parallelogram(triangle, shape):
+    pass
+
+
+def triangle_intersects_triangle(triangle, shape):
+    pass
 
 
 def circle_intersects_circle(circle, shape):
