@@ -65,5 +65,6 @@ def main():
 
     pp(vertices)
 
+
 if __name__ == '__main__':
     main()
