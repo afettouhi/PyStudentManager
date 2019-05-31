@@ -30,3 +30,7 @@ class LoggingProxy:
         else:
             print("Set attribute {!r} = {!r} on {!r}".format(name, value, target))
 
+    def __repr__(self):
+        target = super().__getattribute__('target')
+        repr_callable = getattr(target,'__repr__')
+        return repr_callable
