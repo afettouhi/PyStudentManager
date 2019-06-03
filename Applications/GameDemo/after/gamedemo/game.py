@@ -10,8 +10,8 @@ __author__ = "Reindert-Jan Ekker"
 
 import random
 
-from weapons import Weapon, Sword, FireBreath
-from player import Player
+from gamedemo.weapons import Weapon, Sword, FireBreath
+from gamedemo.player import Player
 
 
 class Game:
